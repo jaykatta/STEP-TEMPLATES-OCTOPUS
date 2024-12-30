@@ -1,107 +1,106 @@
-#!/bin/bash
-
-echo "AWS Access Key: #{AWS_access_key}"
-echo "AWS Secret Key: #{AWS_secret_key}"
-echo "AWS Region: #{AWS_region}"
-echo "AWS Account ID: #{AWS_account_id}"
-echo "ECR Repository Name: #{ECR_repository_name}"
-echo "ECS Task Definition Name: #{ECS_task_definition_name}"
-echo "ECS Cluster Name: #{ECS_cluster_name}"
-echo "ECS Service Name: #{ECS_service_name}"
-
-# Ensure AWS variables are set
-if [ -z "#{AWS_access_key}" ] || [ -z "#{AWS_secret_key}" ] || [ -z "#{AWS_region}" ] || [ -z "#{AWS_account_id}" ] || [ -z "#{ECR_repository_name}" ] || [ -z "#{ECS_task_definition_name}" ] || [ -z "#{ECS_cluster_name}" ] || [ -z "#{ECS_service_name}" ]; then
-  echo "One or more required parameters are missing."
-  exit 1
-fi
-
-echo "Configuring AWS CLI..."
-aws configure set aws_access_key_id "#{AWS_access_key}"
-aws configure set aws_secret_access_key "#{AWS_secret_key}"
-aws configure set region "#{AWS_region}"
-echo "AWS CLI configuration complete."
-
-# Validate AWS region
-if [ -z "#{AWS_region}" ]; then
-  echo "Error: AWS region is not set"
-  exit 1
-fi
-
-echo "Using AWS region: #{AWS_region}"
-
-# Login to AWS ECR
-echo "Logging into AWS ECR..."
-aws ecr get-login-password --region "#{AWS_region}" | docker login --username AWS --password-stdin "#{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com"
-
-# List all images in the ECR repository and fetch the tags
-echo "Listing images in ECR repository..."
-IMAGE_TAGS=$(aws ecr list-images --repository-name "#{ECR_repository_name}" --query 'imageIds[*].imageTag' --output text --region "#{AWS_region}")
-
-# If no images found, exit with an error
-if [ -z "$IMAGE_TAGS" ]; then
-  echo "No images found in the ECR repository: #{ECR_repository_name}"
-  exit 1
-fi
-
-# Sort the tags to get the highest version (assuming version tags are in the format v1, v2, v3, etc.)
-HIGHEST_TAG=$(echo "$IMAGE_TAGS" | tr '\t' '\n' | sort -V | tail -n 1)
-
-echo "Highest version tag found: $HIGHEST_TAG"
-
-# Pull the latest image from ECR using the highest version tag
-echo "Pulling Docker image #{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com/#{ECR_repository_name}:$HIGHEST_TAG..."
-docker pull "#{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com/#{ECR_repository_name}:$HIGHEST_TAG"
-
-# Create the ECS task definition JSON file dynamically
-TASK_DEF_JSON="/tmp/ecs-task-definition.json"
-cat << EOF > $TASK_DEF_JSON
 {
-    "family": "#{ECS_task_definition_name}",
-    "executionRoleArn": "arn:aws:iam::#{AWS_account_id}:role/ecsTaskExecutionRole",
-    "networkMode": "awsvpc",
-    "containerDefinitions": [
-        {
-            "name": "octopus",
-            "image": "#{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com/#{ECR_repository_name}:$HIGHEST_TAG",
-            "essential": true,
-            "memory": 512,
-            "memoryReservation": 256,
-            "cpu": 256,
-            "logConfiguration": {
-                "logDriver": "awslogs",
-                "options": {
-                    "awslogs-group": "/ecs/#{ECS_task_definition_name}",
-                    "awslogs-region": "#{AWS_region}",
-                    "awslogs-stream-prefix": "ecs"
-                }
-            }
-        }
-    ],
-    "requiresCompatibilities": [
-        "FARGATE"
-    ],
-    "cpu": "256",
-    "memory": "512"
+  "Id": "516b58f6-cbd1-43cf-ae2e-6b1637d18682",
+  "Name": "UPDATE TASK DEF AND SERVICE",
+  "Description": "This step updates the ECS task definition with the highest versioned image from the specified ECR repository.",
+  "ActionType": "Octopus.Script",
+  "Version": 1,
+  "CommunityActionTemplateId": null,
+  "Packages": [],
+  "GitDependencies": [],
+  "Properties": {
+    "Octopus.Action.Script.Syntax": "Bash",
+    "Octopus.Action.Script.ScriptSource": "Inline",
+    "Octopus.Action.RunOnServer": "false",
+    "Octopus.Action.Script.ScriptBody": "#!/bin/bash\n\necho \"AWS Access Key: #{AWS_access_key}\"\necho \"AWS Secret Key: #{AWS_secret_key}\"\necho \"AWS Region: #{AWS_region}\"\necho \"AWS Account ID: #{AWS_account_id}\"\necho \"ECR Repository Name: #{ECR_repository_name}\"\necho \"ECS Task Definition Name: #{ECS_task_definition_name}\"\necho \"ECS Cluster Name: #{ECS_cluster_name}\"\necho \"ECS Service Name: #{ECS_service_name}\"\n\n# Ensure AWS variables are set\nif [ -z \"#{AWS_access_key}\" ] || [ -z \"#{AWS_secret_key}\" ] || [ -z \"#{AWS_region}\" ] || [ -z \"#{AWS_account_id}\" ] || [ -z \"#{ECR_repository_name}\" ] || [ -z \"#{ECS_task_definition_name}\" ] || [ -z \"#{ECS_cluster_name}\" ] || [ -z \"#{ECS_service_name}\" ]; then\n  echo \"One or more required parameters are missing.\"\n  exit 1\nfi\n\necho \"Configuring AWS CLI...\"\naws configure set aws_access_key_id \"#{AWS_access_key}\"\naws configure set aws_secret_access_key \"#{AWS_secret_key}\"\naws configure set region \"#{AWS_region}\"\necho \"AWS CLI configuration complete.\"\n\n# Validate AWS region\nif [ -z \"#{AWS_region}\" ]; then\n  echo \"Error: AWS region is not set\"\n  exit 1\nfi\n\necho \"Using AWS region: #{AWS_region}\"\n\n# Login to AWS ECR\necho \"Logging into AWS ECR...\"\naws ecr get-login-password --region \"#{AWS_region}\" | docker login --username AWS --password-stdin \"#{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com\"\n\n# List all images in the ECR repository and fetch the tags\necho \"Listing images in ECR repository...\"\nIMAGE_TAGS=$(aws ecr list-images --repository-name \"#{ECR_repository_name}\" --query 'imageIds[*].imageTag' --output text --region \"#{AWS_region}\")\n\n# If no images found, exit with an error\nif [ -z \"$IMAGE_TAGS\" ]; then\n  echo \"No images found in the ECR repository: #{ECR_repository_name}\"\n  exit 1\nfi\n\n# Sort the tags to get the highest version (assuming version tags are in the format v1, v2, v3, etc.)\nHIGHEST_TAG=$(echo \"$IMAGE_TAGS\" | tr '\\t' '\\n' | sort -V | tail -n 1)\n\necho \"Highest version tag found: $HIGHEST_TAG\"\n\n# Pull the latest image from ECR using the highest version tag\necho \"Pulling Docker image #{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com/#{ECR_repository_name}:$HIGHEST_TAG...\"\ndocker pull \"#{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com/#{ECR_repository_name}:$HIGHEST_TAG\"\n\n# Create the ECS task definition JSON file dynamically\nTASK_DEF_JSON=\"/tmp/ecs-task-definition.json\"\ncat << EOF > $TASK_DEF_JSON\n{\n    \"family\": \"#{ECS_task_definition_name}\",\n    \"executionRoleArn\": \"arn:aws:iam::#{AWS_account_id}:role/ecsTaskExecutionRole\",\n    \"networkMode\": \"awsvpc\",\n    \"containerDefinitions\": [\n        {\n            \"name\": \"octopus\",\n            \"image\": \"#{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com/#{ECR_repository_name}:$HIGHEST_TAG\",\n            \"essential\": true,\n            \"memory\": 512,\n            \"memoryReservation\": 256,\n            \"cpu\": 256,\n            \"logConfiguration\": {\n                \"logDriver\": \"awslogs\",\n                \"options\": {\n                    \"awslogs-group\": \"/ecs/#{ECS_task_definition_name}\",\n                    \"awslogs-region\": \"#{AWS_region}\",\n                    \"awslogs-stream-prefix\": \"ecs\"\n                }\n            }\n        }\n    ],\n    \"requiresCompatibilities\": [\n        \"FARGATE\"\n    ],\n    \"cpu\": \"256\",\n    \"memory\": \"512\"\n}\nEOF\n\necho \"ECS task definition JSON file created at $TASK_DEF_JSON.\"\n\n# Register the ECS task definition using the JSON file\necho \"Creating new revision of ECS Task Definition...\"\nNEW_TASK_DEF=$(aws ecs register-task-definition \\\n    --cli-input-json file://$TASK_DEF_JSON \\\n    --region \"#{AWS_region}\")\n\n# Extract the task definition ARN from the output\nTASK_DEF_ARN=$(echo \"$NEW_TASK_DEF\" | jq -r '.taskDefinition.taskDefinitionArn')\n\n# Update the ECS service to use the new task definition\necho \"Updating ECS Service with new Task Definition...\"\naws ecs update-service \\\n    --cluster \"#{ECS_cluster_name}\" \\\n    --service \"#{ECS_service_name}\" \\\n    --task-definition \"$TASK_DEF_ARN\" \\\n    --region \"#{AWS_region}\"\n\necho \"ECS Service successfully updated!\"\n"
+  },
+  "Parameters": [
+    {
+      "Id": "f0adf63e-b90d-4d61-97cc-c2ab37699cc6",
+      "Name": "AWS_access_key",
+      "Label": "AWS Access Key",
+      "HelpText": "AWS Access Key ID for authentication",
+      "DefaultValue": "",
+      "DisplaySettings": {
+        "Octopus.ControlType": "Sensitive"
+      }
+    },
+    {
+      "Id": "3b57a998-4be0-41de-b0b3-1ca59f7b0db7",
+      "Name": "AWS_secret_key",
+      "Label": "AWS Secret Key",
+      "HelpText": "AWS Secret Access Key for authentication",
+      "DefaultValue": "",
+      "DisplaySettings": {
+        "Octopus.ControlType": "Sensitive"
+      }
+    },
+    {
+      "Id": "b87cb768-1f8e-4667-bc55-c742f30a6fa5",
+      "Name": "AWS_account_id",
+      "Label": "AWS Account ID",
+      "HelpText": "AWS Account ID to use in the ECR repository URI",
+      "DefaultValue": "",
+      "DisplaySettings": {
+        "Octopus.ControlType": "SingleLineText"
+      }
+    },
+    {
+      "Id": "d3abbb1e-b842-4d4c-8ec9-478ac2d27d9f",
+      "Name": "AWS_region",
+      "Label": "AWS Region",
+      "HelpText": "AWS Region where the ECR repository and ECS service are located",
+      "DefaultValue": "ap-south-1",
+      "DisplaySettings": {
+        "Octopus.ControlType": "SingleLineText"
+      }
+    },
+    {
+      "Id": "8a03d622-73d4-440e-bc0e-9a3d6c5475d4",
+      "Name": "ECS_cluster_name",
+      "Label": "ECS Cluster Name",
+      "HelpText": "The ECS Cluster to deploy the task definition to",
+      "DefaultValue": "",
+      "DisplaySettings": {
+        "Octopus.ControlType": "SingleLineText"
+      }
+    },
+    {
+      "Id": "7a0abf8e-0e8e-41ea-8e4c-9d7f94c676f5",
+      "Name": "ECS_task_definition_name",
+      "Label": "ECS Task Definition Name",
+      "HelpText": "The ECS Task Definition to be updated",
+      "DefaultValue": "",
+      "DisplaySettings": {
+        "Octopus.ControlType": "SingleLineText"
+      }
+    },
+    {
+      "Id": "cf3e0d96-2344-4630-b4c2-bb7e92a8b8b4",
+      "Name": "ECR_repository_name",
+      "Label": "ECR Repository Name",
+      "HelpText": "The name of the ECR repository to pull images from",
+      "DefaultValue": "",
+      "DisplaySettings": {
+        "Octopus.ControlType": "SingleLineText"
+      }
+    },
+    {
+      "Id": "f6892c8d-94c8-4d4b-841e-3d8e11a7a82b",
+      "Name": "ECS_service_name",
+      "Label": "ECS Service Name",
+      "HelpText": "The name of the ECS service to update",
+      "DefaultValue": "",
+      "DisplaySettings": {
+        "Octopus.ControlType": "SingleLineText"
+      }
+    }
+  ],
+  "StepPackageId": "Octopus.Script",
+  "$Meta": {
+    "ExportedAt": "2024-12-30T05:19:25.316Z",
+    "OctopusVersion": "2025.1.4242",
+    "Type": "ActionTemplate"
+  },
+  "LastModifiedBy": "Your GitHub Username",
+  "Category": "other"
 }
-EOF
-
-echo "ECS task definition JSON file created at $TASK_DEF_JSON."
-
-# Register the ECS task definition using the JSON file
-echo "Creating new revision of ECS Task Definition..."
-NEW_TASK_DEF=$(aws ecs register-task-definition \
-    --cli-input-json file://$TASK_DEF_JSON \
-    --region "#{AWS_region}")
-
-# Extract the task definition ARN from the output
-TASK_DEF_ARN=$(echo "$NEW_TASK_DEF" | jq -r '.taskDefinition.taskDefinitionArn')
-
-# Update the ECS service to use the new task definition
-echo "Updating ECS Service with new Task Definition..."
-aws ecs update-service \
-    --cluster "#{ECS_cluster_name}" \
-    --service "#{ECS_service_name}" \
-    --task-definition "$TASK_DEF_ARN" \
-    --region "#{AWS_region}"
-
-echo "ECS Service successfully updated!"
