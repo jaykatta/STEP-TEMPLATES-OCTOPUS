@@ -1,0 +1,86 @@
+{
+  "Id": "703b2065-8514-4360-baf8-0d674448771a",
+  "Name": "IMAGE BUILD AND PUSH TO ECR",
+  "Description": "This script builds, tags, and pushes a Docker image to Amazon Elastic Container Registry (ECR). The script is external for better maintainability.",
+  "ActionType": "Octopus.Script",
+  "Version": 1,
+  "CommunityActionTemplateId": null,
+  "Packages": [],
+  "GitDependencies": [],
+  "Properties": {
+    "Octopus.Action.Script.Syntax": "Bash",
+    "Octopus.Action.Script.ScriptSource": "Inline",
+    "Octopus.Action.RunOnServer": "false",
+    "Octopus.Action.Script.ScriptBody": "#!/bin/bash\n\n# Ensure required parameters are provided\nif [ -z \"#{AWS_access_key}\" ] || [ -z \"#{AWS_secret_key}\" ] || [ -z \"#{AWS_region}\" ] || [ -z \"#{AWS_account_id}\" ] || [ -z \"#{ECR_repository_name}\" ] || [ -z \"#{ECR_dockerfile_path}\" ]; then\n  echo \"One or more required parameters are missing.\"\n  exit 1\nfi\n\n# AWS CLI Configuration (using provided credentials)\necho \"Configuring AWS CLI...\"\naws configure set aws_access_key_id \"#{AWS_access_key}\"\naws configure set aws_secret_access_key \"#{AWS_secret_key}\"\naws configure set region \"#{AWS_region}\"\necho \"AWS CLI configuration complete.\"\n\n# Get AWS ECR login credentials and authenticate Docker\necho \"Logging into AWS ECR...\"\naws ecr get-login-password --region \"#{AWS_region}\" | docker login --username AWS --password-stdin \"#{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com/#{ECR_repository_name}\"\n\nif [ $? -ne 0 ]; then\n  echo \"Docker login to AWS ECR failed.\"\n  exit 1\nfi\n\n# Fetch the latest version from ECR\necho \"Fetching the latest version from ECR...\"\nLATEST_VERSION=$(aws ecr describe-images --repository-name \"#{ECR_repository_name}\" \\\n  --region \"#{AWS_region}\" \\\n  --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[0]' \\\n  --output text 2>/dev/null)\n\nif [[ $LATEST_VERSION == \"None\" || -z $LATEST_VERSION ]]; then\n  echo \"No existing tags found in the repository. Starting with version 1.0.0.\"\n  NEW_VERSION=\"1.0.0\"\nelse\n  echo \"Latest version found: $LATEST_VERSION\"\n  \n  # Split the latest version into MAJOR.MINOR.PATCH\n  IFS='.' read -r MAJOR MINOR PATCH <<<\"${LATEST_VERSION}\"\n  \n  # Increment the PATCH version\n  PATCH=$((PATCH + 1))\n  \n  # Create the new version by combining the parts\n  NEW_VERSION=\"$MAJOR.$MINOR.$PATCH\"\n  echo \"Incremented version: $NEW_VERSION\"\nfi\n\n# Check if the incremented version already exists in ECR\necho \"Checking if version $NEW_VERSION already exists in ECR...\"\nEXISTING_TAGS=$(aws ecr describe-images --repository-name \"#{ECR_repository_name}\" --region \"#{AWS_region}\" --query \"imageDetails[].imageTags\" --output text)\n\n# If the version already exists, increment it\nwhile [[ $EXISTING_TAGS == *\"$NEW_VERSION\"* ]]; do\n  PATCH=$((PATCH + 1))\n  NEW_VERSION=\"$MAJOR.$MINOR.$PATCH\"\n  echo \"Version $NEW_VERSION already exists. Incremented to $NEW_VERSION.\"\ndone\n\n# Build Docker image\necho \"Building Docker image...\"\ndocker build -t \"#{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com/#{ECR_repository_name}:$NEW_VERSION\" \"#{ECR_dockerfile_path}\"\n\nif [ $? -ne 0 ]; then\n  echo \"Docker image build failed.\"\n  exit 1\nfi\n\n# Tag the image as 'latest'\necho \"Tagging Docker image as latest...\"\ndocker tag \"#{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com/#{ECR_repository_name}:$NEW_VERSION\" \"#{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com/#{ECR_repository_name}:latest\"\n\n# Push the Docker image to AWS ECR with the versioned tag\necho \"Pushing Docker image to ECR with version: $NEW_VERSION...\"\ndocker push \"#{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com/#{ECR_repository_name}:$NEW_VERSION\"\n\nif [ $? -eq 0 ]; then\n  echo \"Docker image successfully pushed to AWS ECR with version: $NEW_VERSION\"\nelse\n  echo \"Docker image push to AWS ECR failed.\"\n  exit 1\nfi\n\n# Push 'latest' tag to ECR\necho \"Pushing 'latest' Docker image to ECR...\"\ndocker push \"#{AWS_account_id}.dkr.ecr.#{AWS_region}.amazonaws.com/#{ECR_repository_name}:$NEW_VERSION\"\n\nif [ $? -eq 0 ]; then\n  echo \"'latest' Docker image successfully pushed to AWS ECR.\"\nelse\n  echo \"Push of 'latest' Docker image to AWS ECR failed.\"\n  exit 1\nfi\n"
+  },
+  "Parameters": [
+    {
+      "Id": "6b8587c1-fadf-450f-a3a6-36b74e59217f",
+      "Name": "AWS_access_key",
+      "Label": "AWS Access Key",
+      "HelpText": "The AWS access key for authentication.",
+      "DefaultValue": "",
+      "DisplaySettings": {
+        "Octopus.ControlType": "SingleLineText"
+      }
+    },
+    {
+      "Id": "bdbb5271-d5c9-43f6-b6f1-411f7a0f01db",
+      "Name": "AWS_secret_key",
+      "Label": "AWS Secret Key",
+      "HelpText": "The AWS secret key for authentication.",
+      "DefaultValue": "",
+      "DisplaySettings": {
+        "Octopus.ControlType": "SingleLineText"
+      }
+    },
+    {
+      "Id": "4b2c1ad7-9f1c-496d-ae70-15d26a865508",
+      "Name": "AWS_region",
+      "Label": "AWS Region",
+      "HelpText": "The AWS region where the ECR repository is located.",
+      "DefaultValue": "ap-south-1",
+      "DisplaySettings": {
+        "Octopus.ControlType": "SingleLineText"
+      }
+    },
+    {
+      "Id": "9d47c132-7a7c-4f3f-b4b6-e09c9e2b8bfc",
+      "Name": "AWS_account_id",
+      "Label": "AWS Account ID",
+      "HelpText": "The AWS account ID where the ECR repository is hosted.",
+      "DefaultValue": "",
+      "DisplaySettings": {
+        "Octopus.ControlType": "SingleLineText"
+      }
+    },
+    {
+      "Id": "b47d33fe-9b67-4b8e-bfd1-75e7c45b8d2b",
+      "Name": "ECR_repository_name",
+      "Label": "ECR Repository Name",
+      "HelpText": "The name of the ECR repository where the Docker image will be pushed.",
+      "DefaultValue": "",
+      "DisplaySettings": {
+        "Octopus.ControlType": "SingleLineText"
+      }
+    },
+    {
+      "Id": "aa7f0c63-c201-4d72-b16e-d75fe74cb3f7",
+      "Name": "ECR_dockerfile_path",
+      "Label": "Dockerfile Path",
+      "HelpText": "The local directory or path where the Dockerfile is located (relative to the repository root).",
+      "DefaultValue": ".",
+      "DisplaySettings": {
+        "Octopus.ControlType": "SingleLineText"
+      }
+    }
+  ],
+  "StepPackageId": "Octopus.Script",
+  "$Meta": {
+    "ExportedAt": "2024-12-30T05:14:41.693Z",
+    "OctopusVersion": "2025.1.4242",
+    "Type": "ActionTemplate"
+  },
+  "LastModifiedBy": "Your GitHub Username",
+  "Category": "other"
+}
